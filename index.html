@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Uploader - King's Landing</title>
+    <!-- AWS SDK and Cognito - Using unpkg.com as alternative CDN -->
+    <script src="https://unpkg.com/aws-sdk@2.1563.0/dist/aws-sdk.min.js"></script>
+    <script src="https://unpkg.com/amazon-cognito-identity-js@6.3.12/dist/amazon-cognito-identity.min.js"></script>
+    
+    <!-- Fallback script for offline/blocked CDN scenarios -->
+    <script>
+        // Check if AWS SDK loaded, if not provide basic functionality
+        if (typeof AWS === 'undefined') {
+            console.warn('AWS SDK not loaded - using mock implementation for demo');
+            window.AWS = {
+                config: { region: '', credentials: null },
+                CognitoIdentityCredentials: function() { return {}; }
+            };
+        }
+        
+        // Check if Cognito loaded, if not provide basic functionality  
+        if (typeof AmazonCognitoIdentity === 'undefined') {
+            console.warn('Cognito SDK not loaded - using mock implementation for demo');
+            window.AmazonCognitoIdentity = {
+                CognitoUserPool: function(poolData) {
+                    return {
+                        getCurrentUser: function() { return null; }
+                    };
+                },
+                CognitoUser: function(userData) {
+                    return {
+                        authenticateUser: function(authDetails, callbacks) {
+                            // Mock authentication for demo
+                            setTimeout(() => {
+                                callbacks.onSuccess({
+                                    getIdToken: () => ({ getJwtToken: () => 'mock-jwt-token' })
+                                });
+                            }, 1000);
+                        },
+                        signOut: function() {},
+                        getSignInUserSession: function() {
+                            return {
+                                getIdToken: () => ({ getJwtToken: () => 'mock-jwt-token' })
+                            };
+                        },
+                        getUsername: function() { return 'demo-user'; }
+                    };
+                },
+                AuthenticationDetails: function(authData) { return authData; }
+            };
+        }
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .auth-section, .upload-section {
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"], input[type="password"], textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus, input[type="password"]:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 200px;
+            resize: vertical;
+            font-family: 'Courier New', monospace;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .user-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .logout-btn {
+            background: #dc3545;
+            margin-top: 0;
+            width: auto;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏰 King's Landing</h1>
+            <p>HTML File Uploader</p>
+        </div>
+
+        <div id="status-message" class="status hidden"></div>
+
+        <!-- Authentication Section -->
+        <div id="auth-section" class="auth-section">
+            <h3>Login Required</h3>
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" placeholder="Enter your username">
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" placeholder="Enter your password">
+            </div>
+            <button id="login-btn" onclick="handleLogin()">Login</button>
+        </div>
+
+        <!-- User Info Section -->
+        <div id="user-section" class="user-info hidden">
+            <p>Logged in as: <strong id="user-display"></strong></p>
+            <button class="logout-btn" onclick="handleLogout()">Logout</button>
+        </div>
+
+        <!-- Upload Section -->
+        <div id="upload-section" class="upload-section hidden">
+            <h3>Upload HTML Content</h3>
+            <div class="form-group">
+                <label for="filename">File Name:</label>
+                <input type="text" id="filename" placeholder="example.html" value="index.html">
+            </div>
+            <div class="form-group">
+                <label for="html-content">HTML Content:</label>
+                <textarea id="html-content" placeholder="Paste your HTML content here..."></textarea>
+            </div>
+            <button id="upload-btn" onclick="handleUpload()">Upload to S3</button>
+        </div>
+    </div>
+
+    <script>
+        // =====================================
+        // CONFIGURATION SECTION
+        // Update these values for your AWS setup
+        // =====================================
+        const CONFIG = {
+            // AWS Cognito Configuration
+            COGNITO_USER_POOL_ID: 'us-east-1_XXXXXXXXX', // Replace with actual User Pool ID
+            COGNITO_CLIENT_ID: 'XXXXXXXXXXXXXXXXXXXXXXXXXX', // Replace with actual Client ID
+            COGNITO_REGION: 'us-east-1', // Replace with actual region
+            
+            // API Gateway Configuration
+            API_GATEWAY_URL: 'https://api.example.com', // Replace with actual API Gateway URL
+            
+            // S3 Configuration
+            S3_BUCKET: 'kingslanding.io',
+            S3_REGION: 'us-east-1', // Replace with actual region
+            
+            // Demo mode (set to false for production)
+            DEMO_MODE: true // When true, uses mock authentication for testing
+        };
+
+        let currentUser = null;
+        let cognitoUser = null;
+
+        // Initialize AWS SDK
+        AWS.config.region = CONFIG.COGNITO_REGION;
+
+        // Initialize Cognito User Pool
+        const poolData = {
+            UserPoolId: CONFIG.COGNITO_USER_POOL_ID,
+            ClientId: CONFIG.COGNITO_CLIENT_ID
+        };
+        const userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
+
+        // Utility functions
+        function showStatus(message, type = 'info') {
+            const statusElement = document.getElementById('status-message');
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+            statusElement.classList.remove('hidden');
+            
+            // Auto-hide after 5 seconds for success/info messages
+            if (type !== 'error') {
+                setTimeout(() => {
+                    statusElement.classList.add('hidden');
+                }, 5000);
+            }
+        }
+
+        function hideStatus() {
+            document.getElementById('status-message').classList.add('hidden');
+        }
+
+        function showSection(sectionId) {
+            document.getElementById('auth-section').classList.add('hidden');
+            document.getElementById('user-section').classList.add('hidden');
+            document.getElementById('upload-section').classList.add('hidden');
+            
+            if (sectionId) {
+                document.getElementById(sectionId).classList.remove('hidden');
+            }
+        }
+
+        // Authentication functions
+        function handleLogin() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                showStatus('Please enter both username and password.', 'error');
+                return;
+            }
+
+            showStatus('Logging in...', 'info');
+            
+            if (CONFIG.DEMO_MODE) {
+                // Demo mode - simulate successful login
+                setTimeout(() => {
+                    currentUser = username;
+                    document.getElementById('user-display').textContent = username;
+                    showStatus('Login successful! (Demo Mode)', 'success');
+                    showSection('user-section');
+                    document.getElementById('upload-section').classList.remove('hidden');
+                }, 1000);
+                return;
+            }
+            
+            const authenticationData = {
+                Username: username,
+                Password: password,
+            };
+            const authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(authenticationData);
+
+            const userData = {
+                Username: username,
+                Pool: userPool,
+            };
+            cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
+
+            cognitoUser.authenticateUser(authenticationDetails, {
+                onSuccess: function (result) {
+                    currentUser = username;
+                    document.getElementById('user-display').textContent = username;
+                    showStatus('Login successful!', 'success');
+                    showSection('user-section');
+                    document.getElementById('upload-section').classList.remove('hidden');
+                    
+                    // Configure AWS credentials
+                    AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+                        IdentityPoolId: CONFIG.COGNITO_IDENTITY_POOL_ID,
+                        Logins: {
+                            [`cognito-idp.${CONFIG.COGNITO_REGION}.amazonaws.com/${CONFIG.COGNITO_USER_POOL_ID}`]: result.getIdToken().getJwtToken()
+                        }
+                    });
+                },
+                onFailure: function (err) {
+                    console.error('Login failed:', err);
+                    showStatus('Login failed: ' + (err.message || 'Unknown error'), 'error');
+                },
+                newPasswordRequired: function(userAttributes, requiredAttributes) {
+                    showStatus('New password required. Please contact administrator.', 'error');
+                }
+            });
+        }
+
+        function handleLogout() {
+            if (cognitoUser && !CONFIG.DEMO_MODE) {
+                cognitoUser.signOut();
+            }
+            currentUser = null;
+            cognitoUser = null;
+            
+            // Clear form data
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('filename').value = 'index.html';
+            document.getElementById('html-content').value = '';
+            
+            showStatus('Logged out successfully.', 'success');
+            showSection('auth-section');
+        }
+
+        // Upload function
+        async function handleUpload() {
+            if (!currentUser) {
+                showStatus('Please log in first.', 'error');
+                return;
+            }
+
+            const filename = document.getElementById('filename').value.trim();
+            const htmlContent = document.getElementById('html-content').value.trim();
+
+            if (!filename) {
+                showStatus('Please enter a filename.', 'error');
+                return;
+            }
+
+            if (!htmlContent) {
+                showStatus('Please enter HTML content.', 'error');
+                return;
+            }
+
+            // Add .html extension if not present
+            const finalFilename = filename.endsWith('.html') ? filename : filename + '.html';
+
+            showStatus('Uploading file...', 'info');
+            document.getElementById('upload-btn').disabled = true;
+
+            try {
+                if (CONFIG.DEMO_MODE) {
+                    // Demo mode - simulate upload
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    showStatus(`File "${finalFilename}" uploaded successfully! (Demo Mode)`, 'success');
+                    document.getElementById('html-content').value = '';
+                    return;
+                }
+
+                // Get the ID token for API Gateway authentication
+                const session = cognitoUser.getSignInUserSession();
+                const idToken = session.getIdToken().getJwtToken();
+
+                // Upload via API Gateway
+                const response = await fetch(`${CONFIG.API_GATEWAY_URL}/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({
+                        filename: finalFilename,
+                        content: htmlContent,
+                        bucket: CONFIG.S3_BUCKET
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showStatus(`File "${finalFilename}" uploaded successfully!`, 'success');
+                    document.getElementById('html-content').value = '';
+                } else {
+                    const error = await response.text();
+                    throw new Error(`Upload failed: ${error}`);
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                showStatus('Upload failed: ' + error.message, 'error');
+            } finally {
+                document.getElementById('upload-btn').disabled = false;
+            }
+        }
+
+        // Check for existing session on page load
+        window.addEventListener('load', function() {
+            if (CONFIG.DEMO_MODE) {
+                showStatus('Running in Demo Mode - authentication and uploads are simulated', 'info');
+                showSection('auth-section');
+                return;
+            }
+
+            const currentUser = userPool.getCurrentUser();
+            if (currentUser) {
+                currentUser.getSession(function(err, session) {
+                    if (err) {
+                        console.log('No valid session found');
+                        showSection('auth-section');
+                        return;
+                    }
+                    
+                    if (session.isValid()) {
+                        cognitoUser = currentUser;
+                        document.getElementById('user-display').textContent = currentUser.getUsername();
+                        showSection('user-section');
+                        document.getElementById('upload-section').classList.remove('hidden');
+                        showStatus('Welcome back!', 'success');
+                    } else {
+                        showSection('auth-section');
+                    }
+                });
+            } else {
+                showSection('auth-section');
+            }
+        });
+
+        // Handle Enter key in login form
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('username').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    document.getElementById('password').focus();
+                }
+            });
+
+            document.getElementById('password').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    handleLogin();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
