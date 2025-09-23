@@ -250,19 +250,19 @@
         // =====================================
         const CONFIG = {
             // AWS Cognito Configuration
-            COGNITO_USER_POOL_ID: 'us-east-1_XXXXXXXXX', // Replace with actual User Pool ID
-            COGNITO_CLIENT_ID: 'XXXXXXXXXXXXXXXXXXXXXXXXXX', // Replace with actual Client ID
-            COGNITO_REGION: 'us-east-1', // Replace with actual region
+            COGNITO_USER_POOL_ID: 'us-east-2_w8CBtzAjd', // Replace with actual User Pool ID
+            COGNITO_CLIENT_ID: '7opobg0v89bfc9m8u06togln7r', // Replace with actual Client ID
+            COGNITO_REGION: 'us-east-2', // Replace with actual region
             
             // API Gateway Configuration
-            API_GATEWAY_URL: 'https://api.example.com', // Replace with actual API Gateway URL
+            API_GATEWAY_URL: 'https://api.kingslanding.com/production', // Replace with actual API Gateway URL
             
             // S3 Configuration
             S3_BUCKET: 'kingslanding.io',
-            S3_REGION: 'us-east-1', // Replace with actual region
+            S3_REGION: 'us-east-2', // Replace with actual region
             
             // Demo mode (set to false for production)
-            DEMO_MODE: true // When true, uses mock authentication for testing
+            DEMO_MODE: false // When true, uses mock authentication for testing
         };
 
         let currentUser = null;
@@ -426,7 +426,7 @@
                 const idToken = session.getIdToken().getJwtToken();
 
                 // Upload via API Gateway
-                const response = await fetch(`${CONFIG.API_GATEWAY_URL}/upload`, {
+                const response = await fetch(`${CONFIG.API_GATEWAY_URL}/`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
