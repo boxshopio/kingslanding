@@ -255,7 +255,7 @@
             COGNITO_REGION: 'us-east-2', // Replace with actual region
             
             // API Gateway Configuration
-            API_GATEWAY_URL: 'https://api.kingslanding.com/production', // Replace with actual API Gateway URL
+            API_GATEWAY_URL: 'https://6aythwmz6a.execute-api.us-east-2.amazonaws.com/production', // Replace with actual API Gateway URL
             
             // S3 Configuration
             S3_BUCKET: 'kingslanding.io',
@@ -427,14 +427,14 @@
 
                 // Upload via API Gateway
                 const response = await fetch(`${CONFIG.API_GATEWAY_URL}/`, {
-                    method: 'POST',
+                    method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${idToken}`
                     },
                     body: JSON.stringify({
                         filename: finalFilename,
-                        content: htmlContent,
+                        html: htmlContent,
                         bucket: CONFIG.S3_BUCKET
                     })
                 });
