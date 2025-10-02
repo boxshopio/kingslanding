@@ -305,7 +305,8 @@
 
             const finalFilename = filename.endsWith('.html') ? filename : filename + '.html';
             showStatus('Uploading file...', 'info');
-            document.getElementById('upload-btn').disabled = true;
+            const uploadBtn = document.getElementById('upload-btn');
+            uploadBtn.disabled = true;
 
             try {
                 const session = cognitoUser.getSignInUserSession();
@@ -324,18 +325,22 @@
                     })
                 });
 
+                console.log('Upload response status:', response.status);
+                console.log('Upload response ok:', response.ok);
+                const bodyText = await response.text();
+                console.log('Upload response body:', bodyText);
+
                 if (response.ok) {
                     showStatus(`File "${finalFilename}" uploaded successfully!`, 'success');
                     document.getElementById('html-content').value = '';
                 } else {
-                    const error = await response.text();
-                    throw new Error(`Upload failed: ${error}`);
+                    throw new Error(bodyText || `HTTP ${response.status}`);
                 }
-
             } catch (err) {
+                console.error('Upload error caught:', err);
                 showStatus('Upload failed: ' + err.message, 'error');
             } finally {
-                document.getElementById('upload-btn').disabled = false;
+                uploadBtn.disabled = false;
             }
         }
 
