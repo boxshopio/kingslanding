@@ -1,135 +1,86 @@
-import json
 import boto3
-import base64
-import logging
-from botocore.exceptions import ClientError
+import json
 
-# Configure logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-# Initialize S3 client
-s3_client = boto3.client('s3')
+s3 = boto3.client("s3")
+bucket_name = "kingslanding.io"
 
 def lambda_handler(event, context):
-    """
-    Lambda function to handle HTML file uploads to S3
-    Expects POST requests with JSON body containing:
-    - filename: name of the file to create
-    - content: HTML content to upload
-    - bucket: S3 bucket name
-    """
-    
-    # Handle CORS preflight requests
-    if event['httpMethod'] == 'OPTIONS':
+    # --- Start of Dynamic CORS Logic ---
+    origin = event.get("headers", {}).get("origin")
+    allowed_origin = None
+
+    # Define our allowed origins pattern
+    if origin:
+        # Allow the base domain or any subdomain
+        if origin.endswith(".kingslanding.io") or origin == "https://kingslanding.io":
+            allowed_origin = origin
+
+    # If the origin is not allowed, deny the request.
+    if not allowed_origin:
         return {
-            'statusCode': 200,
-            'headers': {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-                'Access-Control-Allow-Methods': 'POST,OPTIONS'
-            },
-            'body': ''
+            "statusCode": 403,
+            "body": json.dumps({"message": "Forbidden: Origin not allowed"})
         }
-    
+
+    # Base CORS headers for all responses
+    cors_headers = {
+        'Access-Control-Allow-Origin': allowed_origin,
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'OPTIONS,PUT,POST',
+        'Access-Control-Allow-Credentials': 'true' # Often needed for complex requests
+    }
+
+    # Handle OPTIONS preflight request
+    if event.get("httpMethod") == "OPTIONS":
+        return {
+            "statusCode": 204, # No Content
+            "headers": cors_headers,
+            "body": ""
+        }
+    # --- End of Dynamic CORS Logic ---
+
+    # Your existing PUT logic follows...
     try:
-        # Parse the request body
-        body = json.loads(event['body'])
-        filename = body.get('filename')
-        content = body.get('content')
-        bucket = body.get('bucket', 'kingslanding.io')
-        
-        # Validate required fields
-        if not filename:
-            raise ValueError("Filename is required")
-        if not content:
-            raise ValueError("Content is required")
-        
-        # Ensure filename has .html extension
-        if not filename.endswith('.html'):
-            filename += '.html'
-        
-        # Log the upload attempt
-        logger.info(f"Uploading file {filename} to bucket {bucket}")
-        
-        # Upload to S3
-        s3_client.put_object(
-            Bucket=bucket,
-            Key=filename,
-            Body=content,
-            ContentType='text/html',
-            CacheControl='max-age=300'  # 5 minute cache
+        body = json.loads(event.get("body", "{}"))
+    except (json.JSONDecodeError, TypeError):
+        return {
+            "statusCode": 400,
+            "headers": cors_headers,
+            "body": json.dumps({"message": "Invalid JSON body"})
+        }
+
+    filename = body.get("filename")
+    html_content = body.get("html")
+    
+    if not filename or not html_content:
+        return {
+            "statusCode": 400,
+            "headers": cors_headers,
+            "body": json.dumps({"message": "Missing 'filename' or 'html' content in request body"})
+        }
+
+    key = f"pages/{filename}"
+
+    try:
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=key,
+            Body=html_content,
+            ContentType="text/html",
         )
-        
-        logger.info(f"Successfully uploaded {filename} to {bucket}")
-        
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-                'Access-Control-Allow-Methods': 'POST,OPTIONS'
-            },
-            'body': json.dumps({
-                'message': 'File uploaded successfully',
-                'filename': filename,
-                'bucket': bucket,
-                'url': f"https://{bucket}/{filename}"
-            })
-        }
-        
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in request body: {str(e)}")
-        return {
-            'statusCode': 400,
-            'headers': {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-                'Access-Control-Allow-Methods': 'POST,OPTIONS'
-            },
-            'body': json.dumps({
-                'error': 'Invalid JSON in request body'
-            })
-        }
-        
-    except ValueError as e:
-        logger.error(f"Validation error: {str(e)}")
-        return {
-            'statusCode': 400,
-            'headers': {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-                'Access-Control-Allow-Methods': 'POST,OPTIONS'
-            },
-            'body': json.dumps({
-                'error': str(e)
-            })
-        }
-        
-    except ClientError as e:
-        logger.error(f"AWS S3 error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-                'Access-Control-Allow-Methods': 'POST,OPTIONS'
-            },
-            'body': json.dumps({
-                'error': 'Failed to upload file to S3'
-            })
-        }
-        
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
         return {
-            'statusCode': 500,
-            'headers': {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-                'Access-Control-Allow-Methods': 'POST,OPTIONS'
-            },
-            'body': json.dumps({
-                'error': 'Internal server error'
-            })
+            "statusCode": 500,
+            "headers": cors_headers,
+            "body": json.dumps({"message": f"Upload failed: {str(e)}"})
         }
+
+    # Add Content-Type for the final success response
+    success_headers = cors_headers.copy()
+    success_headers["Content-Type"] = "application/json"
+
+    return {
+        "statusCode": 200,
+        "headers": success_headers,
+        "body": json.dumps({"message": f"File {filename} uploaded successfully to bucket {bucket_name} with key {key}"})
+    }
