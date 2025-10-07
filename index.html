@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>King's Landing - HTML Editor & Uploader</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://unpkg.com/amazon-cognito-identity-js@6.3.12/dist/amazon-cognito-identity.min.js"></script>
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
@@ -19,14 +22,14 @@
 
     <style>
         body { font-family: 'Inter', sans-serif; }
-        .fira-code { font-family: 'Fira Code', monospace; }
         .hidden { display: none; }
+        .nav-input { width: 150px; padding: 0.5rem; font-size: 0.875rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; }
         /* CodeMirror custom styling */
         .CodeMirror {
             font-family: 'Fira Code', monospace;
             height: 100%;
             font-size: 14px;
-            border-radius: 0 0 0.5rem 0.5rem; /* Match parent container rounding */
+            border-radius: 0 0 0.5rem 0.5rem;
         }
     </style>
 </head>
@@ -36,12 +39,25 @@
         <div class="container mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
-                    <h1 class="text-2xl font-bold ml-3 flex items-center gap-x-3"><span class="text-3xl">🏰</span><span>King's Landing</span></h1>
+                    <h1 class="text-2xl font-bold ml-3 flex items-center gap-x-3">
+                        <span class="text-3xl">🏰</span>
+                        <span>King's Landing</span>
+                    </h1>
                 </div>
+
                 <div class="flex items-center gap-x-4">
-                    <div id="user-status" class="text-sm text-slate-600 hidden">Logged in as: <strong id="user-display" class="font-semibold"></strong></div>
-                    <button id="login-button" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium transition-colors">Login</button>
-                    <button id="logout-button" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors hidden">Logout</button>
+                    <div id="nav-status" class="hidden text-sm font-medium"></div>
+
+                    <div id="login-form" class="flex items-center gap-x-2">
+                        <input type="text" id="username" placeholder="Username" class="nav-input">
+                        <input type="password" id="password" placeholder="Password" class="nav-input">
+                        <button id="signin-button" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium">Sign In</button>
+                    </div>
+
+                    <div id="user-status" class="hidden flex items-center gap-x-4">
+                        <p class="text-sm text-slate-600">Logged in as: <strong id="user-display" class="font-semibold"></strong></p>
+                        <button id="logout-button" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium">Logout</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -76,28 +92,37 @@
 
     <script>
         // --- DOM References ---
+        const loginForm = document.getElementById('login-form');
+        const signinButton = document.getElementById('signin-button');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const userStatusDiv = document.getElementById('user-status');
+        const userDisplaySpan = document.getElementById('user-display');
+        const logoutButton = document.getElementById('logout-button');
         const filenameInput = document.getElementById('filename');
         const renderButton = document.getElementById('render-button');
         const uploadButton = document.getElementById('upload-button');
-        const loginButton = document.getElementById('login-button');
-        const logoutButton = document.getElementById('logout-button');
-        const userStatusDiv = document.getElementById('user-status');
-        const userDisplaySpan = document.getElementById('user-display');
         const statusMessageDiv = document.getElementById('status-message');
         const copyButton = document.getElementById('copy-button');
-        
-        let editor; // To hold the CodeMirror instance
+        const navStatusDiv = document.getElementById('nav-status');
+        let editor;
 
         // --- Configuration ---
         const CONFIG = {
+            COGNITO_REGION: 'us-east-2',
+            COGNITO_USER_POOL_ID: 'us-east-2_w8CBtzAjd',
             COGNITO_CLIENT_ID: '7opobg0v89bfc9m8u06togln7r',
-            COGNITO_HOSTED_UI_DOMAIN: 'https://auth.kingslanding.io',
-            REDIRECT_URI: 'https://kingslanding.io',
             API_GATEWAY_URL: 'https://api.kingslanding.io',
             SITE_BASE_URL: 'https://kingslanding.io'
         };
         
-        // --- MODIFIED: Initial content is now properly formatted ---
+        // --- Initialize Cognito User Pool SDK ---
+        const userPool = new AmazonCognitoIdentity.CognitoUserPool({
+            UserPoolId: CONFIG.COGNITO_USER_POOL_ID,
+            ClientId: CONFIG.COGNITO_CLIENT_ID
+        });
+        
+        // --- Initial Content ---
         const initialHtmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -117,18 +142,79 @@
         // --- Utility Functions ---
         function showStatus(message, type = 'info', isHtml = false) {
             const colors = { info: 'bg-blue-100 text-blue-800', success: 'bg-green-100 text-green-800', error: 'bg-red-100 text-red-800' };
-            if (isHtml) { statusMessageDiv.innerHTML = message; } else { statusMessageDiv.textContent = message; }
+            if (isHtml) {
+                statusMessageDiv.innerHTML = message;
+            } else {
+                statusMessageDiv.textContent = message;
+            }
             statusMessageDiv.className = `mb-4 p-3 rounded-md text-sm ${colors[type]}`;
-            statusMessageDiv.classList.remove('hidden');
         }
 
-        function parseJwt(token) { /* ... (no change) ... */ }
-        function updateUI(isLoggedIn, username = '') { /* ... (no change) ... */ }
-        function handleLogin() { /* ... (no change) ... */ }
-        function handleLogout() { /* ... (no change) ... */ }
-        async function exchangeCodeForTokens(code) { /* ... (no change) ... */ }
-        
+        function showNavStatus(message, type = 'success') {
+            const colors = { success: 'text-green-600', error: 'text-red-600' };
+            navStatusDiv.textContent = message;
+            navStatusDiv.className = `text-sm font-medium ${colors[type]}`;
+            setTimeout(() => { navStatusDiv.className = 'hidden'; }, 4000);
+        }
+
+        function updateUI(isLoggedIn, username = '') {
+            loginForm.classList.toggle('hidden', isLoggedIn);
+            userStatusDiv.classList.toggle('hidden', !isLoggedIn);
+            uploadButton.disabled = !isLoggedIn;
+            if (isLoggedIn) {
+                userDisplaySpan.textContent = username;
+            }
+        }
+
         // --- Core Functions ---
+        function handleLogin() {
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+            if (!username || !password) {
+                showNavStatus('Fields cannot be empty.', 'error');
+                return;
+            }
+
+            const authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails({ Username: username, Password: password });
+            const cognitoUser = new AmazonCognitoIdentity.CognitoUser({ Username: username, Pool: userPool });
+
+            showNavStatus('Signing in...', 'success');
+
+            cognitoUser.authenticateUser(authenticationDetails, {
+                onSuccess: function (session) {
+                    const idToken = session.getIdToken().getJwtToken();
+                    localStorage.setItem('id_token', idToken);
+                    showNavStatus('Login successful!', 'success');
+                    usernameInput.value = '';
+                    passwordInput.value = '';
+                    
+                    cognitoUser.getUserAttributes((err, attributes) => {
+                        if (err) {
+                            updateUI(true, cognitoUser.getUsername());
+                            return;
+                        }
+                        const email = attributes.find(attr => attr.Name === 'email')?.Value;
+                        updateUI(true, email || cognitoUser.getUsername());
+                    });
+                },
+                onFailure: function (err) {
+                    showNavStatus(err.message || 'Login failed.', 'error');
+                },
+            });
+        }
+
+        function handleLogout() {
+            const cognitoUser = userPool.getCurrentUser();
+            if (cognitoUser) {
+                cognitoUser.signOut();
+            }
+            localStorage.removeItem('id_token');
+            usernameInput.value = '';
+            passwordInput.value = '';
+            updateUI(false);
+            showNavStatus('You have been logged out.', 'success');
+        }
+        
         function handleRender() {
             const sourceCode = editor.getValue();
             if (!sourceCode.trim()) return;
@@ -136,15 +222,20 @@
             const url = URL.createObjectURL(blob);
             window.open(url, '_blank');
         }
-        
+
         async function handleUpload() {
             const idToken = localStorage.getItem('id_token');
-            if (!idToken) { showStatus('You must be logged in to upload.', 'error'); return; }
+            if (!idToken) {
+                showStatus('You must be logged in to upload.', 'error');
+                return;
+            }
 
             const filename = filenameInput.value.trim();
-            const htmlContent = editor.getValue(); // Get content from CodeMirror
-
-            if (!filename || !htmlContent.trim()) { showStatus('Filename and HTML content cannot be empty.', 'error'); return; }
+            const htmlContent = editor.getValue();
+            if (!filename || !htmlContent.trim()) {
+                showStatus('Filename and HTML content cannot be empty.', 'error');
+                return;
+            }
             
             showStatus('Uploading...', 'info');
             uploadButton.disabled = true;
@@ -160,7 +251,9 @@
                     const finalUrl = `${CONFIG.SITE_BASE_URL}/pages/${filename}`;
                     const successMessage = `File uploaded successfully! View: <a href="${finalUrl}" target="_blank" class="font-bold underline hover:text-green-900">${finalUrl}</a>`;
                     showStatus(successMessage, 'success', true);
-                } else { throw new Error(`Server error: ${response.statusText}`); }
+                } else {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
             } catch (error) {
                 showStatus(`Upload failed: ${error.message}`, 'error');
             } finally {
@@ -168,7 +261,6 @@
             }
         }
         
-        // --- NEW: Copy Button Functionality ---
         function handleCopy() {
             const code = editor.getValue();
             navigator.clipboard.writeText(code).then(() => {
@@ -180,14 +272,14 @@
         }
         
         // --- Event Listeners & Page Load ---
+        signinButton.addEventListener('click', handleLogin);
+        logoutButton.addEventListener('click', handleLogout);
         renderButton.addEventListener('click', handleRender);
         uploadButton.addEventListener('click', handleUpload);
-        loginButton.addEventListener('click', handleLogin);
-        logoutButton.addEventListener('click', handleLogout);
         copyButton.addEventListener('click', handleCopy);
+        passwordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
 
-        window.addEventListener('load', async () => {
-            // NEW: Initialize CodeMirror Editor
+        window.addEventListener('load', () => {
             editor = CodeMirror.fromTextArea(document.getElementById('html-input'), {
                 mode: 'htmlmixed',
                 theme: 'material-darker',
@@ -195,34 +287,31 @@
                 lineWrapping: true
             });
             editor.setValue(initialHtmlContent);
-            
             filenameInput.value = 'index.html';
 
-            const params = new URLSearchParams(window.location.search);
-            const code = params.get('code');
-            let idToken = localStorage.getItem('id_token');
-
-            if (code) idToken = await exchangeCodeForTokens(code).catch(() => null);
-            
-            if (idToken) {
-                const decoded = parseJwt(idToken);
-                if (decoded && (decoded.exp * 1000 > Date.now())) {
-                    updateUI(true, decoded['cognito:username']);
-                } else {
-                    localStorage.removeItem('id_token');
-                    updateUI(false);
-                }
+            const cognitoUser = userPool.getCurrentUser();
+            if (cognitoUser) {
+                cognitoUser.getSession((err, session) => {
+                    if (err || !session.isValid()) {
+                        updateUI(false);
+                        return;
+                    }
+                    const idToken = session.getIdToken().getJwtToken();
+                    localStorage.setItem('id_token', idToken);
+                    
+                    cognitoUser.getUserAttributes((err, attributes) => {
+                        if (err) {
+                            updateUI(true, cognitoUser.getUsername());
+                            return;
+                        }
+                        const email = attributes.find(attr => attr.Name === 'email')?.Value;
+                        updateUI(true, email || cognitoUser.getUsername());
+                    });
+                });
             } else {
                 updateUI(false);
             }
         });
-        
-        // To save space, the unchanged functions are collapsed. The full logic is the same as the previous version.
-        parseJwt = function(token) { try { return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch (e) { return null; } }
-        updateUI = function(isLoggedIn, username = '') { loginButton.classList.toggle('hidden', isLoggedIn); logoutButton.classList.toggle('hidden', !isLoggedIn); userStatusDiv.classList.toggle('hidden', !isLoggedIn); uploadButton.disabled = !isLoggedIn; if(isLoggedIn) userDisplaySpan.textContent = username; }
-        handleLogin = function() { const loginUrl = `${CONFIG.COGNITO_HOSTED_UI_DOMAIN}/login?response_type=code&client_id=${CONFIG.COGNITO_CLIENT_ID}&redirect_uri=${CONFIG.REDIRECT_URI}&scope=openid+profile+email`; window.location.assign(loginUrl); }
-        handleLogout = function() { localStorage.removeItem('id_token'); const logoutUrl = `${CONFIG.COGNITO_HOSTED_UI_DOMAIN}/logout?client_id=${CONFIG.COGNITO_CLIENT_ID}&logout_uri=${CONFIG.REDIRECT_URI}`; window.location.assign(logoutUrl); }
-        exchangeCodeForTokens = async function(code) { const params = new URLSearchParams({ grant_type: 'authorization_code', client_id: CONFIG.COGNITO_CLIENT_ID, redirect_uri: CONFIG.REDIRECT_URI, code }); const response = await fetch(`${CONFIG.COGNITO_HOSTED_UI_DOMAIN}/oauth2/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-form-urlencoded' }, body: params }); if (!response.ok) throw new Error('Token exchange failed'); const data = await response.json(); localStorage.setItem('id_token', data.id_token); window.history.replaceState({}, document.title, window.location.pathname); return data.id_token; }
     </script>
 </body>
 </html>
