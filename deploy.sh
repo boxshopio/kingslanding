@@ -7,7 +7,7 @@ set -e
 
 # Configuration (update these values)
 S3_BUCKET="kingslanding.io"
-CLOUDFRONT_DISTRIBUTION_ID=""  # Add your CloudFront distribution ID
+CLOUDFRONT_DISTRIBUTION_ID="E2I7CZOTSI0I5H"  # Add your CloudFront distribution ID
 AWS_REGION="us-east-1"
 
 # Colors for output
