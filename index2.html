@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HTML Uploader - King's Landing</title>
+
+    <!-- AWS SDK and Cognito -->
+    <script src="https://unpkg.com/aws-sdk@2.1563.0/dist/aws-sdk.min.js"></script>
+    <script src="https://unpkg.com/amazon-cognito-identity-js@6.3.12/dist/amazon-cognito-identity.min.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .auth-section,
+        .upload-section {
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 200px;
+            resize: vertical;
+            font-family: 'Courier New', monospace;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .user-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .logout-btn {
+            background: #dc3545;
+            margin-top: 0;
+            width: auto;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏰 King's Landing</h1>
+            <p>HTML File Uploader</p>
+        </div>
+
+        <div id="status-message" class="status hidden"></div>
+
+        <div id="auth-section" class="auth-section">
+            <h3>Login Required</h3>
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" placeholder="Enter your username">
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" placeholder="Enter your password">
+            </div>
+            <button id="login-btn" onclick="handleLogin()">Login</button>
+        </div>
+
+        <div id="user-section" class="user-info hidden">
+            <p>Logged in as: <strong id="user-display"></strong></p>
+            <button class="logout-btn" onclick="handleLogout()">Logout</button>
+        </div>
+
+        <div id="upload-section" class="upload-section hidden">
+            <h3>Upload HTML Content</h3>
+            <div class="form-group">
+                <label for="filename">File Name:</label>
+                <input type="text" id="filename" placeholder="example.html" value="index.html">
+            </div>
+            <div class="form-group">
+                <label for="html-content">HTML Content:</label>
+                <textarea id="html-content" placeholder="Paste your HTML content here..."></textarea>
+            </div>
+            <button id="upload-btn" onclick="handleUpload()">Upload to S3</button>
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            COGNITO_USER_POOL_ID: 'us-east-2_w8CBtzAjd',
+            COGNITO_CLIENT_ID: '7opobg0v89bfc9m8u06togln7r',
+            COGNITO_REGION: 'us-east-2',
+            // COGNITO_IDENTITY_POOL_ID: 'us-east-2:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', // Replace
+            API_GATEWAY_URL: 'https://6aythwmz6a.execute-api.us-east-2.amazonaws.com/production',
+            S3_BUCKET: 'kingslanding.io'
+        };
+
+        let cognitoUser = null;
+        AWS.config.region = CONFIG.COGNITO_REGION;
+
+        const userPool = new AmazonCognitoIdentity.CognitoUserPool({
+            UserPoolId: CONFIG.COGNITO_USER_POOL_ID,
+            ClientId: CONFIG.COGNITO_CLIENT_ID
+        });
+
+        function showStatus(message, type = 'info') {
+            const el = document.getElementById('status-message');
+            el.textContent = message;
+            el.className = `status ${type}`;
+            el.classList.remove('hidden');
+            if (type !== 'error') setTimeout(() => el.classList.add('hidden'), 5000);
+        }
+
+        function showSection(sectionId) {
+            ['auth-section', 'user-section', 'upload-section'].forEach(id =>
+                document.getElementById(id).classList.add('hidden')
+            );
+            if (sectionId) document.getElementById(sectionId).classList.remove('hidden');
+        }
+
+        function handleLogin() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            if (!username || !password) {
+                showStatus('Please enter both username and password.', 'error');
+                return;
+            }
+
+            showStatus('Logging in...', 'info');
+
+            const authDetails = new AmazonCognitoIdentity.AuthenticationDetails({
+                Username: username,
+                Password: password
+            });
+
+            const userData = { Username: username, Pool: userPool };
+            cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
+
+            cognitoUser.authenticateUser(authDetails, {
+                onSuccess: function (result) {
+                    document.getElementById('user-display').textContent = username;
+                    showStatus('Login successful!', 'success');
+                    showSection('user-section');
+                    document.getElementById('upload-section').classList.remove('hidden');
+
+                    AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+                        IdentityPoolId: CONFIG.COGNITO_IDENTITY_POOL_ID,
+                        Logins: {
+                            [`cognito-idp.${CONFIG.COGNITO_REGION}.amazonaws.com/${CONFIG.COGNITO_USER_POOL_ID}`]: result.getIdToken().getJwtToken()
+                        }
+                    });
+                },
+                onFailure: function (err) {
+                    showStatus('Login failed: ' + (err.message || 'Unknown error'), 'error');
+                },
+                newPasswordRequired: function () {
+                    showStatus('New password required. Please contact administrator.', 'error');
+                }
+            });
+        }
+
+        function handleLogout() {
+            if (cognitoUser) cognitoUser.signOut();
+            cognitoUser = null;
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('filename').value = 'index.html';
+            document.getElementById('html-content').value = '';
+            showStatus('Logged out successfully.', 'success');
+            showSection('auth-section');
+        }
+
+        async function handleUpload() {
+            if (!cognitoUser) {
+                showStatus('Please log in first.', 'error');
+                return;
+            }
+
+            const filename = document.getElementById('filename').value.trim();
+            const htmlContent = document.getElementById('html-content').value.trim();
+            if (!filename || !htmlContent) {
+                showStatus('Filename and HTML content are required.', 'error');
+                return;
+            }
+
+            const finalFilename = filename.endsWith('.html') ? filename : filename + '.html';
+            showStatus('Uploading file...', 'info');
+            const uploadBtn = document.getElementById('upload-btn');
+            uploadBtn.disabled = true;
+
+            try {
+                const session = cognitoUser.getSignInUserSession();
+                const idToken = session.getIdToken().getJwtToken();
+
+                const response = await fetch(`${CONFIG.API_GATEWAY_URL}/`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({
+                        filename: finalFilename,
+                        html: htmlContent,
+                        bucket: CONFIG.S3_BUCKET
+                    })
+                });
+
+                console.log('Upload response status:', response.status);
+                console.log('Upload response ok:', response.ok);
+                const bodyText = await response.text();
+                console.log('Upload response body:', bodyText);
+
+                if (response.ok) {
+                    showStatus(`File "${finalFilename}" uploaded successfully!`, 'success');
+                    document.getElementById('html-content').value = '';
+                } else {
+                    throw new Error(bodyText || `HTTP ${response.status}`);
+                }
+            } catch (err) {
+                console.error('Upload error caught:', err);
+                showStatus('Upload failed: ' + err.message, 'error');
+            } finally {
+                uploadBtn.disabled = false;
+            }
+        }
+
+        window.addEventListener('load', () => {
+            const user = userPool.getCurrentUser();
+            if (user) {
+                user.getSession((err, session) => {
+                    if (err || !session.isValid()) {
+                        showSection('auth-section');
+                    } else {
+                        cognitoUser = user;
+                        document.getElementById('user-display').textContent = user.getUsername();
+                        showSection('user-section');
+                        document.getElementById('upload-section').classList.remove('hidden');
+                        showStatus('Welcome back!', 'success');
+                    }
+                });
+            } else {
+                showSection('auth-section');
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('username').addEventListener('keypress', e => {
+                if (e.key === 'Enter') document.getElementById('password').focus();
+            });
+            document.getElementById('password').addEventListener('keypress', e => {
+                if (e.key === 'Enter') handleLogin();
+            });
+        });
+    </script>
+</body>
+
+</html>
