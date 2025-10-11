@@ -1,4 +1,47 @@
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/tfplan
+terraform/*.tfvars
+!terraform/terraform.tfvars.example
+
 # Lambda deployment packages
+*.zip
+terraform/s3_upload_lambda.zip
+terraform/cloudfront_invalidation_lambda.zip
+
+# Webapp build artifacts (future)
+webapp/dist/
+webapp/build/
+
+# AWS
+.aws/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# Node modules (if any)
+node_modules/
 lambda-deployment.zip
 *.zip
 
