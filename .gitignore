@@ -9,12 +9,8 @@ terraform/*.tfvars
 
 # Lambda deployment packages
 *.zip
-terraform/s3_upload_lambda.zip
-terraform/cloudfront_invalidation_lambda.zip
-
-# Webapp build artifacts (future)
-webapp/dist/
-webapp/build/
+terraform/s3_upload.zip
+terraform/cloudfront_invalidation.zip
 
 # AWS
 .aws/

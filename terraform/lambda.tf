@@ -1,15 +1,15 @@
 # Archive the S3 upload Lambda function
 data "archive_file" "upload_lambda_zip" {
   type        = "zip"
-  source_file = "${path.root}/../src/s3_upload_lambda.py"
-  output_path = "${path.module}/s3_upload_lambda.zip"
+  source_file = "${path.root}/../lambdas/s3_upload.py"
+  output_path = "${path.module}/s3_upload.zip"
 }
 
 # Archive the CloudFront invalidation Lambda function
 data "archive_file" "cloudfront_invalidation_lambda_zip" {
   type        = "zip"
-  source_file = "${path.root}/../src/cloudfront_invalidation_lambda.py"
-  output_path = "${path.module}/cloudfront_invalidation_lambda.zip"
+  source_file = "${path.root}/../lambdas/invalidation.py"
+  output_path = "${path.module}/cloudfront_invalidation.zip"
 }
 
 # S3 upload Lambda function
@@ -17,7 +17,7 @@ resource "aws_lambda_function" "upload" {
   filename         = data.archive_file.upload_lambda_zip.output_path
   function_name    = "kingslanding-s3-upload"
   role            = aws_iam_role.upload_lambda.arn
-  handler         = "s3_upload_lambda.lambda_handler"
+  handler         = "s3_upload.lambda_handler"
   source_code_hash = data.archive_file.upload_lambda_zip.output_base64sha256
   runtime         = "python3.11"
   timeout         = 30
@@ -39,7 +39,7 @@ resource "aws_lambda_function" "cloudfront_invalidation" {
   filename         = data.archive_file.cloudfront_invalidation_lambda_zip.output_path
   function_name    = "kingslanding-cloudfront-invalidation"
   role            = aws_iam_role.cloudfront_invalidation_lambda.arn
-  handler         = "cloudfront_invalidation_lambda.lambda_handler"
+  handler         = "invalidation.lambda_handler"
   source_code_hash = data.archive_file.cloudfront_invalidation_lambda_zip.output_base64sha256
   runtime         = "python3.11"
   timeout         = 60

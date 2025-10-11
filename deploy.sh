@@ -95,17 +95,15 @@ show_outputs() {
     print_success "Infrastructure deployed successfully! 🏰"
     echo ""
     print_status "Next steps:"
-    echo "1. Upload your webapp files to the S3 bucket (will auto-invalidate CloudFront)"
-    echo "   Run: ./upload-webapp.sh"
+    echo "1. Deploy your webapp: ./deploy.sh webapp"
     echo "2. Point your domain DNS to the CloudFront distribution"
     echo "3. Test the upload functionality"
     echo ""
-    print_status "Note: Any .html file uploads (including webapp/index.html) will automatically"
-    echo "      trigger CloudFront invalidation for instant updates!"
+    print_status "Note: Any .html file uploads will automatically trigger CloudFront invalidation!"
 }
 
 # Main deployment function
-deploy() {
+deploy_infra() {
     print_status "Starting King's Landing infrastructure deployment..."
     echo ""
     
@@ -133,6 +131,55 @@ deploy() {
     fi
 }
 
+# Deploy webapp function
+deploy_webapp() {
+    print_status "Starting webapp deployment..."
+    
+    check_aws
+    
+    # Change to terraform directory to get outputs
+    cd "$(dirname "$0")/terraform"
+    
+    if [ ! -f "terraform.tfstate" ]; then
+        print_error "Terraform state not found. Please run '$0 infra' first."
+        exit 1
+    fi
+    
+    BUCKET_NAME=$(terraform output -raw s3_bucket_name 2>/dev/null)
+    DISTRIBUTION_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null)
+    
+    if [ -z "$BUCKET_NAME" ]; then
+        print_error "Could not get S3 bucket name from Terraform output."
+        exit 1
+    fi
+    
+    cd ..
+    
+    # Check if index.html exists
+    if [ ! -f "index.html" ]; then
+        print_error "index.html not found in project root."
+        exit 1
+    fi
+    
+    print_status "Uploading index.html to S3 bucket: $BUCKET_NAME"
+    
+    # Upload index.html to S3 root
+    aws s3 cp index.html "s3://$BUCKET_NAME/index.html" \
+        --content-type "text/html" \
+        --cache-control "max-age=300"
+    
+    print_success "index.html uploaded successfully!"
+    print_status "S3 event should trigger CloudFront invalidation automatically..."
+    print_status "CloudFront Distribution ID: $DISTRIBUTION_ID"
+    
+    echo ""
+    print_status "Check CloudWatch logs to see invalidation in action:"
+    echo "aws logs tail /aws/lambda/kingslanding-cloudfront-invalidation --follow"
+    
+    echo ""
+    print_success "🏰 Webapp deployed! Your site should update within 1-2 minutes."
+}
+
 # Destroy function
 destroy() {
     print_warning "This will destroy ALL infrastructure resources!"
@@ -158,22 +205,35 @@ show_help() {
     echo "Usage: $0 [command]"
     echo ""
     echo "Commands:"
-    echo "  deploy    Deploy the infrastructure (default)"
+    echo "  infra     Deploy AWS infrastructure (default)"
+    echo "  webapp    Deploy webapp files to S3"
+    echo "  all       Deploy infrastructure then webapp"
     echo "  destroy   Destroy all infrastructure"
     echo "  plan      Show deployment plan without applying"
     echo "  help      Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0                # Deploy infrastructure"
-    echo "  $0 deploy         # Deploy infrastructure"
-    echo "  $0 plan           # Show plan only"
+    echo "  $0 infra          # Deploy infrastructure" 
+    echo "  $0 webapp         # Deploy webapp only"
+    echo "  $0 all            # Deploy everything"
     echo "  $0 destroy        # Destroy infrastructure"
 }
 
 # Parse command line arguments
-case "${1:-deploy}" in
-    "deploy")
-        deploy
+case "${1:-infra}" in
+    "infra"|"deploy")
+        deploy_infra
+        ;;
+    "webapp")
+        deploy_webapp
+        ;;
+    "all")
+        deploy_infra
+        echo ""
+        print_status "Infrastructure deployed. Now deploying webapp..."
+        echo ""
+        deploy_webapp
         ;;
     "destroy")
         destroy
@@ -185,7 +245,7 @@ case "${1:-deploy}" in
         check_tfvars
         init_terraform
         plan_terraform
-        print_status "Plan complete. Run '$0 deploy' to apply."
+        print_status "Plan complete. Run '$0 infra' to apply."
         ;;
     "help"|"-h"|"--help")
         show_help

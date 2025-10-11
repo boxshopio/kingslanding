@@ -13,35 +13,52 @@ A web-based HTML editor and uploader that allows users to create and deploy HTML
 ## Architecture
 
 ```
-User → Web App → Cognito Auth → API Gateway → Upload Lambda → S3 Bucket
-                                                               ↓ (S3 Event)
-                                                          Invalidation Lambda → CloudFront
+User → Web App → Cognito Auth → API Gateway → S3 Upload Lambda → S3 Bucket
+                                                                    ↓ (S3 Event)
+                                                           Invalidation Lambda → CloudFront
 ```
 
 ### Components
 
 - **S3 Bucket**: Stores website files and uploaded HTML pages
-- **CloudFront**: Global CDN for fast content delivery
+- **CloudFront**: Global CDN for fast content delivery  
 - **Lambda Functions**:
-  - Upload Lambda: Handles file uploads via API Gateway
+  - S3 Upload Lambda: Handles file uploads via API Gateway
   - Invalidation Lambda: Automatically invalidates CloudFront cache on S3 changes
 - **API Gateway**: REST API with Cognito authentication
 - **Cognito**: User authentication and authorization
+
+## Project Structure
+
+```
+kingslanding/
+├── index.html              # Main web application
+├── lambdas/               # Lambda function source code
+│   ├── s3_upload.py       # S3 upload handler
+│   └── invalidation.py    # CloudFront invalidation handler
+├── terraform/             # Infrastructure as Code
+│   ├── main.tf           # Main Terraform configuration
+│   ├── s3.tf             # S3 bucket and notifications
+│   ├── cloudfront.tf     # CloudFront distribution
+│   ├── lambda.tf         # Lambda functions
+│   ├── api_gateway.tf    # API Gateway
+│   ├── iam.tf            # IAM roles and policies
+│   └── ...
+├── deploy.sh             # Unified deployment script
+└── README.md            # This file
+```
 
 ## Quick Start
 
 ### 1. Deploy Infrastructure
 
 ```bash
-# Make sure you have AWS CLI and Terraform installed
+# Deploy AWS infrastructure
+./deploy.sh infra
+
+# Or just run (defaults to infra)
 ./deploy.sh
 ```
-
-The deployment script will:
-- Check prerequisites (Terraform, AWS CLI)
-- Create `terraform.tfvars` from example (you'll need to edit it)
-- Deploy all AWS infrastructure
-- Provide next steps
 
 ### 2. Configure terraform.tfvars
 
@@ -54,18 +71,14 @@ aws_region = "us-east-1"
 environment = "prod"
 ```
 
-### 3. Upload Main Website
-
-After deployment, upload your webapp files to the S3 bucket root. CloudFront invalidation will be triggered automatically!
+### 3. Deploy Webapp
 
 ```bash
-# Quick upload script (gets bucket name from Terraform)
-./upload-webapp.sh
-```
+# Deploy the main webapp
+./deploy.sh webapp
 
-Or manually:
-```bash
-aws s3 cp webapp/index.html s3://your-bucket-name/index.html
+# Or deploy everything at once
+./deploy.sh all
 ```
 
 ## Event-Driven Cache Invalidation
@@ -75,53 +88,24 @@ The system uses S3 events to trigger CloudFront invalidation for both user uploa
 1. User uploads HTML file via web interface OR developer uploads webapp files
 2. S3 Upload Lambda saves file to S3 bucket (`pages/` directory for user files, root for webapp)
 3. S3 triggers event notification for any `.html` file
-4. CloudFront Invalidation Lambda receives event and creates CloudFront invalidation
+4. Invalidation Lambda receives event and creates CloudFront invalidation
    - For `index.html`: invalidates both `/index.html` and `/` (root path)
    - For other files: invalidates the specific file path
 5. Updated content is immediately available globally
 
 **Cost**: Free for < 1,000 invalidations/month, then $0.005 per path.
 
-## Development
-
-### Local Testing
-
-The Lambda functions can be tested locally from the `src/` directory:
-
-```python
-# Test S3 upload lambda
-python src/s3_upload_lambda.py
-
-# Test CloudFront invalidation lambda
-python src/cloudfront_invalidation_lambda.py
-```
-
-### File Structure
-
-```
-├── webapp/                             # Web application files
-│   └── index.html                     # Main web application
-├── src/                                # Lambda function source code
-│   ├── s3_upload_lambda.py            # S3 upload Lambda function
-│   └── cloudfront_invalidation_lambda.py # CloudFront invalidation Lambda
-├── terraform/                          # Infrastructure as Code
-│   ├── main.tf                        # Main Terraform configuration
-│   ├── s3.tf                          # S3 bucket and notifications
-│   ├── cloudfront.tf                  # CloudFront distribution
-│   ├── lambda.tf                      # Lambda functions
-│   ├── api_gateway.tf                 # API Gateway
-│   ├── iam.tf                         # IAM roles and policies
-│   └── ...
-├── deploy.sh                           # Infrastructure deployment script
-├── upload-webapp.sh                    # Quick webapp upload script
-└── README.md                          # This file
-```
-
 ## Deployment Commands
 
 ```bash
-# Deploy infrastructure
-./deploy.sh deploy
+# Deploy infrastructure only
+./deploy.sh infra
+
+# Deploy webapp only (requires infrastructure first)
+./deploy.sh webapp
+
+# Deploy everything
+./deploy.sh all
 
 # Show deployment plan only
 ./deploy.sh plan
@@ -133,16 +117,30 @@ python src/cloudfront_invalidation_lambda.py
 ./deploy.sh help
 ```
 
-## Configuration
+## Development
 
-### Environment Variables
+### Local Testing
+
+The Lambda functions can be tested locally:
+
+```python
+# Test S3 upload lambda
+python lambdas/s3_upload.py
+
+# Test CloudFront invalidation lambda
+python lambdas/invalidation.py
+```
+
+### Configuration
+
+#### Environment Variables
 
 The Lambda functions use these environment variables (set by Terraform):
 
 - `S3_BUCKET_NAME`: Target S3 bucket for uploads
 - `CLOUDFRONT_DISTRIBUTION_ID`: CloudFront distribution to invalidate
 
-### Terraform Variables
+#### Terraform Variables
 
 See `terraform/terraform.tfvars.example` for all available configuration options.
 
@@ -188,6 +186,34 @@ aws s3 cp test.html s3://your-bucket/pages/test.html
 aws cloudfront get-distribution --id YOUR_DISTRIBUTION_ID
 ```
 
+## Infrastructure Details
+
+The complete AWS infrastructure includes:
+
+- **S3 Bucket**: With event notifications for CloudFront invalidation
+- **CloudFront Distribution**: Optimized cache behaviors for uploaded content
+- **Lambda Functions**: Both upload and invalidation functions with proper IAM roles
+- **API Gateway**: Complete REST API setup with CORS and Cognito integration
+- **Event-Driven Architecture**: S3 events automatically trigger cache invalidation
+
+### Prerequisites
+
+1. **AWS CLI configured** with appropriate credentials
+2. **Terraform >= 1.0** installed
+3. **SSL Certificate** in AWS Certificate Manager (us-east-1 region)
+4. **Domain name** pointed to your AWS account
+
+### Cost Analysis
+
+**Monthly costs for typical usage:**
+- **S3**: ~$1-5 (depending on storage and requests)
+- **CloudFront**: ~$1-10 (depending on traffic)
+- **Lambda**: ~$0-1 (likely free tier)
+- **API Gateway**: ~$0-5 (depending on requests)
+- **Route 53**: ~$0.50 (if using AWS DNS)
+
+**Total**: ~$3-20/month for most use cases
+
 ## Contributing
 
 1. Fork the repository
@@ -202,51 +228,3 @@ This project is licensed under the MIT License.
 ---
 
 Built with ❤️ for fast, secure HTML deployment.
-
-A single page application for uploading HTML content to S3 through API Gateway with Cognito authentication.
-
-## Features
-
-- 🔐 **Secure Authentication** - AWS Cognito User Pool integration
-- 📁 **File Upload** - Upload HTML content directly to S3
-- 🌐 **API Gateway Integration** - Serverless backend processing
-- ☁️ **CloudFront Ready** - Optimized for CloudFront distribution
-- 📱 **Responsive Design** - Works on desktop and mobile devices
-- ⚡ **Single Page App** - Self-contained HTML file
-
-## Files
-
-- `index.html` - Main application file (single page app)
-- `lambda_function.py` - AWS Lambda function for API Gateway backend
-- `SETUP.md` - Detailed configuration and deployment guide
-
-## Quick Start
-
-1. Configure AWS resources (Cognito, API Gateway, S3)
-2. Update configuration in `index.html`
-3. Deploy `index.html` to your S3 bucket
-4. Deploy `lambda_function.py` to AWS Lambda
-5. Access via CloudFront URL
-
-See `SETUP.md` for detailed instructions.
-
-## Architecture
-
-```
-[User] → [CloudFront] → [S3 (index.html)] → [Cognito Auth] → [API Gateway] → [Lambda] → [S3 Upload]
-```
-
-## Requirements
-
-- AWS Cognito User Pool
-- AWS API Gateway 
-- AWS Lambda
-- AWS S3 bucket (kingslanding.io)
-- AWS CloudFront distribution
-
-## Security
-
-- All API endpoints secured with Cognito JWT tokens
-- HTTPS-only communication
-- Input validation and sanitization
-- Proper CORS configuration
