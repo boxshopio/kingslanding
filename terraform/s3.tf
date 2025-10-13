@@ -70,3 +70,59 @@ resource "aws_s3_bucket_notification" "main" {
 
   depends_on = [aws_lambda_permission.s3_invoke_invalidation]
 }
+
+# S3 bucket lifecycle configuration for cleanup and cost optimization
+resource "aws_s3_bucket_lifecycle_configuration" "main" {
+  bucket = aws_s3_bucket.main.id
+
+  # Existing rule: Expire non-current versions for pages/ directory
+  rule {
+    id     = "expire-noncurrent-versions-for-pages"
+    status = "Enabled"
+
+    filter {
+      prefix = "pages/"
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+
+  # New rule: Clean up expired delete markers
+  rule {
+    id     = "delete-expired-delete-markers"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+
+  # New rule: Abort incomplete multipart uploads after 7 days
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+
+  # New rule: Expire non-current versions for all files (broader coverage)
+  rule {
+    id     = "expire-noncurrent-versions-global"
+    status = "Enabled"
+
+    # This applies to all objects in the bucket
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90  # Longer retention for non-pages content
+    }
+  }
+}
