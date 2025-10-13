@@ -30,5 +30,5 @@ output "cloudfront_invalidation_lambda_function_name" {
 
 output "api_gateway_url" {
   description = "API Gateway URL"
-  value       = "${aws_api_gateway_deployment.main.invoke_url}/${aws_api_gateway_stage.main.stage_name}"
+  value       = "https://${aws_api_gateway_rest_api.main.id}.execute-api.${data.aws_region.current.name}.amazonaws.com/${aws_api_gateway_stage.main.stage_name}"
 }

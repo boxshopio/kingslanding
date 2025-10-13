@@ -1,6 +1,7 @@
 # IAM role for S3 upload Lambda function
 resource "aws_iam_role" "upload_lambda" {
-  name = "kingslanding-s3-upload-lambda-role"
+  name = "kingslanding-s3-uploader-role-pu9fqvvd"  # Match existing role name
+  path = "/service-role/"  # Match existing path
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -17,6 +18,7 @@ resource "aws_iam_role" "upload_lambda" {
 }
 
 # IAM policy for S3 upload Lambda function
+# Using least-privilege policy instead of overly permissive AmazonS3FullAccess
 resource "aws_iam_role_policy" "upload_lambda" {
   name = "kingslanding-s3-upload-lambda-policy"
   role = aws_iam_role.upload_lambda.id
@@ -86,43 +88,6 @@ resource "aws_iam_role_policy" "cloudfront_invalidation_lambda" {
           "cloudfront:CreateInvalidation"
         ]
         Resource = "*"
-      }
-    ]
-  })
-}
-
-# IAM role for API Gateway
-resource "aws_iam_role" "api_gateway" {
-  name = "kingslanding-api-gateway-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "apigateway.amazonaws.com"
-        }
-      }
-    ]
-  })
-}
-
-# IAM policy for API Gateway to invoke Lambda
-resource "aws_iam_role_policy" "api_gateway" {
-  name = "kingslanding-api-gateway-policy"
-  role = aws_iam_role.api_gateway.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "lambda:InvokeFunction"
-        ]
-        Resource = aws_lambda_function.upload.arn
       }
     ]
   })

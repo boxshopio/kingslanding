@@ -15,23 +15,27 @@ data "archive_file" "cloudfront_invalidation_lambda_zip" {
 # S3 upload Lambda function
 resource "aws_lambda_function" "upload" {
   filename         = data.archive_file.upload_lambda_zip.output_path
-  function_name    = "kingslanding-s3-upload"
+  function_name    = "kingslanding-s3-uploader"
   role            = aws_iam_role.upload_lambda.arn
-  handler         = "s3_upload.lambda_handler"
+  handler         = "lambda_function.lambda_handler"  # Match existing handler
   source_code_hash = data.archive_file.upload_lambda_zip.output_base64sha256
-  runtime         = "python3.11"
-  timeout         = 30
+  runtime         = "python3.13"  # Match existing runtime
+  timeout         = 3              # Match existing timeout
+  memory_size     = 128           # Match existing memory size
 
-  environment {
-    variables = {
-      S3_BUCKET_NAME = aws_s3_bucket.main.bucket
-    }
+  # Ignore code changes since we're managing existing deployed code
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
   }
 
+  # Don't add environment variables if they don't exist
+  
   depends_on = [
-    aws_iam_role_policy.upload_lambda,
+    aws_iam_role_policy.upload_lambda,  # Restored - using least-privilege inline policy
     aws_cloudwatch_log_group.upload_lambda,
   ]
+
+  tags = local.common_tags
 }
 
 # CloudFront invalidation Lambda function (new)
@@ -54,6 +58,8 @@ resource "aws_lambda_function" "cloudfront_invalidation" {
     aws_iam_role_policy.cloudfront_invalidation_lambda,
     aws_cloudwatch_log_group.cloudfront_invalidation_lambda,
   ]
+
+  tags = local.common_tags
 }
 
 # CloudWatch Log Groups
@@ -74,13 +80,4 @@ resource "aws_lambda_permission" "s3_invoke_invalidation" {
   function_name = aws_lambda_function.cloudfront_invalidation.function_name
   principal     = "s3.amazonaws.com"
   source_arn    = aws_s3_bucket.main.arn
-}
-
-# Lambda permission for API Gateway to invoke upload function
-resource "aws_lambda_permission" "api_gateway_invoke_upload" {
-  statement_id  = "AllowExecutionFromAPIGateway"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.upload.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
 }

@@ -16,6 +16,9 @@ terraform {
 provider "aws" {
   region = var.aws_region
 
+  # Lock to specific AWS account for security
+  allowed_account_ids = ["457320695046"]
+
   default_tags {
     tags = {
       Project     = "kingslanding"
