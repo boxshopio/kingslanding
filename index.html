@@ -242,8 +242,8 @@
                 return;
             }
             
-            // Automatically append .html extension
-            const filename = filenamePart.endsWith('.html') ? filenamePart : `${filenamePart}.html`;
+            // Automatically append .html extension (handle case-insensitive)
+            const filename = filenamePart.toLowerCase().endsWith('.html') ? filenamePart : `${filenamePart}.html`;
             
             showStatus('Uploading...', 'info');
             uploadButton.disabled = true;
