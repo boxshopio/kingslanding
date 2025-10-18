@@ -67,7 +67,10 @@
         <div class="flex flex-col bg-white rounded-lg shadow-md overflow-hidden flex-grow">
             <div class="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                 <span class="text-sm font-semibold text-slate-600">HTML Editor</span>
-                <button id="copy-button" class="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-md text-xs font-medium transition-colors">Copy</button>
+                <div class="flex gap-2">
+                    <button id="copy-button" class="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-md text-xs font-medium transition-colors">Copy</button>
+                    <button id="clear-button" class="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-xs font-medium transition-colors">Clear</button>
+                </div>
             </div>
             <textarea id="html-input" class="hidden"></textarea>
         </div>
@@ -104,6 +107,7 @@
         const uploadButton = document.getElementById('upload-button');
         const statusMessageDiv = document.getElementById('status-message');
         const copyButton = document.getElementById('copy-button');
+        const clearButton = document.getElementById('clear-button');
         const navStatusDiv = document.getElementById('nav-status');
         let editor;
 
@@ -271,12 +275,19 @@
             });
         }
         
+        function handleClear() {
+            if (confirm('Are you sure you want to clear the editor? This action cannot be undone.')) {
+                editor.setValue('');
+            }
+        }
+        
         // --- Event Listeners & Page Load ---
         signinButton.addEventListener('click', handleLogin);
         logoutButton.addEventListener('click', handleLogout);
         renderButton.addEventListener('click', handleRender);
         uploadButton.addEventListener('click', handleUpload);
         copyButton.addEventListener('click', handleCopy);
+        clearButton.addEventListener('click', handleClear);
         passwordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
 
         window.addEventListener('load', () => {
