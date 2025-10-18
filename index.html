@@ -78,10 +78,17 @@
         <div class="flex-shrink-0 bg-white rounded-lg shadow-md mt-4 p-4">
             <div id="status-message" class="hidden mb-4 p-3 rounded-md text-sm"></div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                <div class="md:col-span-2">
+                <div>
+                    <label for="domain-select" class="block text-sm font-medium text-slate-700 mb-1">Domain</label>
+                    <select id="domain-select" class="w-full p-2 border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                        <option value="kingslanding.io">kingslanding.io</option>
+                        <option value="boxshop.io">boxshop.io</option>
+                    </select>
+                </div>
+                <div>
                     <label for="filename" class="block text-sm font-medium text-slate-700 mb-1">Page Name (without .html)</label>
                     <div class="flex items-center w-full border border-slate-300 rounded-md focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500">
-                        <span class="px-3 py-2 bg-slate-100 text-slate-500 text-sm border-r border-slate-300">https://kingslanding.io/pages/</span>
+                        <span id="domain-preview" class="px-3 py-2 bg-slate-100 text-slate-500 text-sm border-r border-slate-300">https://kingslanding.io/pages/</span>
                         <input type="text" id="filename" class="flex-grow p-2 border-0 focus:ring-0 fira-code text-sm" placeholder="index">
                         <span class="px-3 py-2 bg-slate-100 text-slate-500 text-sm border-l border-slate-300">.html</span>
                     </div>
@@ -103,6 +110,8 @@
         const userStatusDiv = document.getElementById('user-status');
         const userDisplaySpan = document.getElementById('user-display');
         const logoutButton = document.getElementById('logout-button');
+        const domainSelect = document.getElementById('domain-select');
+        const domainPreview = document.getElementById('domain-preview');
         const filenameInput = document.getElementById('filename');
         const renderButton = document.getElementById('render-button');
         const uploadButton = document.getElementById('upload-button');
@@ -119,7 +128,11 @@
             COGNITO_CLIENT_ID: '7opobg0v89bfc9m8u06togln7r',
             API_GATEWAY_URL: 'https://api.kingslanding.io',
             SITE_BASE_URL: 'https://kingslanding.io',
-            HTML_EXT: '.html'
+            HTML_EXT: '.html',
+            DOMAINS: [
+                { value: 'kingslanding.io', label: 'kingslanding.io' },
+                { value: 'boxshop.io', label: 'boxshop.io' }
+            ]
         };
         
         // --- Initialize Cognito User Pool SDK ---
@@ -170,6 +183,11 @@
             if (isLoggedIn) {
                 userDisplaySpan.textContent = username;
             }
+        }
+
+        function updateDomainPreview() {
+            const selectedDomain = domainSelect.value;
+            domainPreview.textContent = `https://${selectedDomain}/pages/`;
         }
 
         // --- Core Functions ---
@@ -238,6 +256,8 @@
 
             const filenamePart = filenameInput.value.trim();
             const htmlContent = editor.getValue();
+            const selectedDomain = domainSelect.value;
+            
             if (!filenamePart || !htmlContent.trim()) {
                 showStatus('Filename and HTML content cannot be empty.', 'error');
                 return;
@@ -252,12 +272,16 @@
             try {
                 const response = await fetch(`${CONFIG.API_GATEWAY_URL}/`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': idToken },
-                    body: JSON.stringify({ filename, html: htmlContent })
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'Authorization': idToken,
+                        'X-Target-Domain': selectedDomain
+                    },
+                    body: JSON.stringify({ filename, html: htmlContent, domain: selectedDomain })
                 });
 
                 if (response.ok) {
-                    const finalUrl = `${CONFIG.SITE_BASE_URL}/pages/${filename}`;
+                    const finalUrl = `https://${selectedDomain}/pages/${filename}`;
                     const successMessage = `File uploaded successfully! View: <a href="${finalUrl}" target="_blank" class="font-bold underline hover:text-green-900">${finalUrl}</a>`;
                     showStatus(successMessage, 'success', true);
                 } else {
@@ -293,6 +317,7 @@
         uploadButton.addEventListener('click', handleUpload);
         copyButton.addEventListener('click', handleCopy);
         clearButton.addEventListener('click', handleClear);
+        domainSelect.addEventListener('change', updateDomainPreview);
         passwordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
 
         window.addEventListener('load', () => {
