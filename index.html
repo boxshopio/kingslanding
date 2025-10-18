@@ -243,12 +243,13 @@
             }
             
             // Automatically append .html extension (handle case-insensitive, normalize to lowercase)
+            const HTML_EXT = '.html';
             let filename;
-            if (filenamePart.toLowerCase().endsWith('.html')) {
+            if (filenamePart.toLowerCase().endsWith(HTML_EXT)) {
                 // Remove any existing .html extension and re-add it in lowercase for consistency
-                filename = filenamePart.substring(0, filenamePart.length - 5) + '.html';
+                filename = filenamePart.substring(0, filenamePart.length - HTML_EXT.length) + HTML_EXT;
             } else {
-                filename = `${filenamePart}.html`;
+                filename = `${filenamePart}${HTML_EXT}`;
             }
             
             showStatus('Uploading...', 'info');
