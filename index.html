@@ -242,8 +242,14 @@
                 return;
             }
             
-            // Automatically append .html extension (handle case-insensitive)
-            const filename = filenamePart.toLowerCase().endsWith('.html') ? filenamePart : `${filenamePart}.html`;
+            // Automatically append .html extension (handle case-insensitive, normalize to lowercase)
+            let filename;
+            if (filenamePart.toLowerCase().endsWith('.html')) {
+                // Remove any existing .html extension and re-add it in lowercase for consistency
+                filename = filenamePart.substring(0, filenamePart.length - 5) + '.html';
+            } else {
+                filename = `${filenamePart}.html`;
+            }
             
             showStatus('Uploading...', 'info');
             uploadButton.disabled = true;
