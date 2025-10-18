@@ -118,7 +118,8 @@
             COGNITO_USER_POOL_ID: 'us-east-2_w8CBtzAjd',
             COGNITO_CLIENT_ID: '7opobg0v89bfc9m8u06togln7r',
             API_GATEWAY_URL: 'https://api.kingslanding.io',
-            SITE_BASE_URL: 'https://kingslanding.io'
+            SITE_BASE_URL: 'https://kingslanding.io',
+            HTML_EXT: '.html'
         };
         
         // --- Initialize Cognito User Pool SDK ---
@@ -243,14 +244,7 @@
             }
             
             // Automatically append .html extension (handle case-insensitive, normalize to lowercase)
-            const HTML_EXT = '.html';
-            let filename;
-            if (filenamePart.toLowerCase().endsWith(HTML_EXT)) {
-                // Remove any existing .html extension and re-add it in lowercase for consistency
-                filename = filenamePart.substring(0, filenamePart.length - HTML_EXT.length) + HTML_EXT;
-            } else {
-                filename = `${filenamePart}${HTML_EXT}`;
-            }
+            const filename = filenamePart.replace(/\.html$/i, '') + CONFIG.HTML_EXT;
             
             showStatus('Uploading...', 'info');
             uploadButton.disabled = true;
