@@ -77,18 +77,23 @@
 
         <div class="flex-shrink-0 bg-white rounded-lg shadow-md mt-4 p-4">
             <div id="status-message" class="hidden mb-4 p-3 rounded-md text-sm"></div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                <div class="md:col-span-2">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-end">
+                <div>
                     <label for="filename" class="block text-sm font-medium text-slate-700 mb-1">Page Name (without .html)</label>
-                    <div class="flex items-center w-full border border-slate-300 rounded-md focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500">
-                        <span class="px-3 py-2 bg-slate-100 text-slate-500 text-sm border-r border-slate-300">https://kingslanding.io/pages/</span>
-                        <input type="text" id="filename" class="flex-grow p-2 border-0 focus:ring-0 fira-code text-sm" placeholder="index">
-                        <span class="px-3 py-2 bg-slate-100 text-slate-500 text-sm border-l border-slate-300">.html</span>
+                    <div class="flex items-center w-full border border-slate-300 rounded-md focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500 overflow-hidden">
+                        <span class="px-2 py-2 bg-slate-100 text-slate-500 text-xs sm:text-sm border-r border-slate-300 whitespace-nowrap flex-shrink-0">https://</span>
+                        <select id="domain-select" class="px-1 py-2 border-0 bg-slate-100 text-slate-700 text-xs sm:text-sm focus:ring-0 border-r border-slate-300 flex-shrink-0">
+                            <option value="kingslanding.io">kingslanding.io</option>
+                            <option value="boxshop.io">boxshop.io</option>
+                        </select>
+                        <span class="px-2 py-2 bg-slate-100 text-slate-500 text-xs sm:text-sm border-r border-slate-300 whitespace-nowrap flex-shrink-0">/pages/</span>
+                        <input type="text" id="filename" class="flex-grow min-w-0 p-2 border-0 focus:ring-0 fira-code text-xs sm:text-sm" placeholder="index">
+                        <span class="px-2 py-2 bg-slate-100 text-slate-500 text-xs sm:text-sm border-l border-slate-300 whitespace-nowrap flex-shrink-0">.html</span>
                     </div>
                 </div>
                 <div class="flex flex-col sm:flex-row gap-4">
-                    <button id="render-button" class="w-full px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-md font-medium transition-colors">Test Render</button>
-                    <button id="upload-button" class="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed" disabled>Upload to Site</button>
+                    <button id="render-button" class="w-full px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-md font-medium transition-colors text-sm">Test Render</button>
+                    <button id="upload-button" class="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm">Upload</button>
                 </div>
             </div>
         </div>
@@ -103,6 +108,7 @@
         const userStatusDiv = document.getElementById('user-status');
         const userDisplaySpan = document.getElementById('user-display');
         const logoutButton = document.getElementById('logout-button');
+        const domainSelect = document.getElementById('domain-select');
         const filenameInput = document.getElementById('filename');
         const renderButton = document.getElementById('render-button');
         const uploadButton = document.getElementById('upload-button');
@@ -119,7 +125,11 @@
             COGNITO_CLIENT_ID: '7opobg0v89bfc9m8u06togln7r',
             API_GATEWAY_URL: 'https://api.kingslanding.io',
             SITE_BASE_URL: 'https://kingslanding.io',
-            HTML_EXT: '.html'
+            HTML_EXT: '.html',
+            DOMAINS: [
+                { value: 'kingslanding.io', label: 'kingslanding.io' },
+                { value: 'boxshop.io', label: 'boxshop.io' }
+            ]
         };
         
         // --- Initialize Cognito User Pool SDK ---
@@ -238,6 +248,8 @@
 
             const filenamePart = filenameInput.value.trim();
             const htmlContent = editor.getValue();
+            const selectedDomain = domainSelect.value;
+            
             if (!filenamePart || !htmlContent.trim()) {
                 showStatus('Filename and HTML content cannot be empty.', 'error');
                 return;
@@ -252,12 +264,15 @@
             try {
                 const response = await fetch(`${CONFIG.API_GATEWAY_URL}/`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': idToken },
-                    body: JSON.stringify({ filename, html: htmlContent })
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'Authorization': idToken
+                    },
+                    body: JSON.stringify({ filename, html: htmlContent, domain: selectedDomain })
                 });
 
                 if (response.ok) {
-                    const finalUrl = `${CONFIG.SITE_BASE_URL}/pages/${filename}`;
+                    const finalUrl = `https://${selectedDomain}/pages/${filename}`;
                     const successMessage = `File uploaded successfully! View: <a href="${finalUrl}" target="_blank" class="font-bold underline hover:text-green-900">${finalUrl}</a>`;
                     showStatus(successMessage, 'success', true);
                 } else {
