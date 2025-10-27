@@ -1,9 +1,8 @@
 import boto3
 import json
-import os
 
 s3 = boto3.client("s3")
-bucket_name = os.environ.get("S3_BUCKET_NAME", "kingslanding.io")
+bucket_name = "kingslanding.io"
 
 def lambda_handler(event, context):
     # --- Start of Dynamic CORS Logic ---
